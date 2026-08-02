@@ -1,0 +1,102 @@
+name: Threads Auto Post
+
+on:
+  schedule:
+    # Monday
+    - cron: "23 7 * * 1"
+      timezone: "Asia/Tokyo"
+    - cron: "37 12 * * 1"
+      timezone: "Asia/Tokyo"
+    - cron: "19 20 * * 1"
+      timezone: "Asia/Tokyo"
+    # Tuesday
+    - cron: "11 8 * * 2"
+      timezone: "Asia/Tokyo"
+    - cron: "53 11 * * 2"
+      timezone: "Asia/Tokyo"
+    - cron: "7 21 * * 2"
+      timezone: "Asia/Tokyo"
+    # Wednesday
+    - cron: "41 7 * * 3"
+      timezone: "Asia/Tokyo"
+    - cron: "16 12 * * 3"
+      timezone: "Asia/Tokyo"
+    - cron: "43 19 * * 3"
+      timezone: "Asia/Tokyo"
+    # Thursday
+    - cron: "27 8 * * 4"
+      timezone: "Asia/Tokyo"
+    - cron: "4 13 * * 4"
+      timezone: "Asia/Tokyo"
+    - cron: "51 20 * * 4"
+      timezone: "Asia/Tokyo"
+    # Friday
+    - cron: "8 7 * * 5"
+      timezone: "Asia/Tokyo"
+    - cron: "49 12 * * 5"
+      timezone: "Asia/Tokyo"
+    - cron: "23 21 * * 5"
+      timezone: "Asia/Tokyo"
+    # Saturday
+    - cron: "44 8 * * 6"
+      timezone: "Asia/Tokyo"
+    - cron: "38 11 * * 6"
+      timezone: "Asia/Tokyo"
+    - cron: "18 19 * * 6"
+      timezone: "Asia/Tokyo"
+    # Sunday
+    - cron: "56 7 * * 0"
+      timezone: "Asia/Tokyo"
+    - cron: "17 13 * * 0"
+      timezone: "Asia/Tokyo"
+    - cron: "36 20 * * 0"
+      timezone: "Asia/Tokyo"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "投稿せず原稿だけ確認する"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: threads-auto-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Publish next post
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+            python post_threads.py --dry-run
+          else
+            python post_threads.py
+          fi
+
+      - name: Save queue position
+        if: github.event_name == 'schedule' || inputs.dry_run == false
+        run: |
+          if git diff --quiet -- state.json; then
+            echo "No state change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "Advance Threads post queue"
+          git push
