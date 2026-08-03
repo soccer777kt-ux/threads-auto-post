@@ -2,9 +2,9 @@ name: Threads Auto Post
 
 on:
   schedule:
-    # Check four times per hour. The script posts only once in each due slot.
-    - cron: "7,22,37,52 * * * *"
-      timezone: "Asia/Tokyo"
+    # Standard UTC cron. Python uses Japan time and posts only once per due slot.
+    # Frequent checks safely recover when GitHub delays or drops one scheduled run.
+    - cron: "2/5 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -23,6 +23,7 @@ concurrency:
 jobs:
   post:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
