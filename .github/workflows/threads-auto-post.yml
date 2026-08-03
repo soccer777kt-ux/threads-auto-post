@@ -38,10 +38,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
             python post_threads.py --dry-run
-          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
-            python post_threads.py --scheduled
           else
-            python post_threads.py
+            python post_threads.py --scheduled
           fi
 
       - name: Save queue position
