@@ -7,16 +7,32 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parent
 POSTS_PATH = ROOT / "posts.json"
 STATE_PATH = ROOT / "state.json"
 API_BASE = "https://graph.threads.net"
+JST = ZoneInfo("Asia/Tokyo")
+
+# Monday=0 ... Sunday=6.  Each day deliberately uses slightly different times.
+DAILY_TARGETS = {
+    0: {"morning": (7, 23), "lunch": (12, 37), "evening": (20, 19)},
+    1: {"morning": (8, 11), "lunch": (11, 53), "evening": (21, 7)},
+    2: {"morning": (7, 41), "lunch": (12, 16), "evening": (19, 43)},
+    3: {"morning": (8, 27), "lunch": (13, 4), "evening": (20, 51)},
+    4: {"morning": (7, 8), "lunch": (12, 49), "evening": (21, 23)},
+    5: {"morning": (8, 44), "lunch": (11, 38), "evening": (19, 18)},
+    6: {"morning": (7, 56), "lunch": (13, 17), "evening": (20, 36)},
+}
+MIN_POST_INTERVAL = timedelta(minutes=90)
 
 
 def load_json(path: Path):
@@ -40,14 +56,62 @@ def api_post(path: str, payload: dict[str, str]) -> dict:
         raise RuntimeError(f"Threads API returned HTTP {error.code}: {detail}") from error
 
 
+def scheduled_slot(state: dict, now: datetime) -> str | None:
+    """Return the oldest due, not-yet-posted slot while avoiding rapid posts."""
+    posted_slots = set(state.get("posted_slots", []))
+    last_posted_at = state.get("last_posted_at")
+    if last_posted_at:
+        last_time = datetime.fromisoformat(last_posted_at)
+        if now - last_time < MIN_POST_INTERVAL:
+            return None
+
+    targets = DAILY_TARGETS[now.weekday()]
+    for slot_name in ("morning", "lunch", "evening"):
+        hour, minute = targets[slot_name]
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        slot_key = f"{now.date().isoformat()}-{slot_name}"
+        if now >= target and slot_key not in posted_slots:
+            return slot_name
+    return None
+
+
+def publish_with_retry(creation_id: str, token: str) -> dict:
+    """Wait for Threads to finish preparing a container, then publish it."""
+    last_error: Exception | None = None
+    for attempt in range(6):
+        if attempt:
+            time.sleep(5)
+        try:
+            return api_post(
+                "/me/threads_publish",
+                {"creation_id": creation_id, "access_token": token},
+            )
+        except RuntimeError as error:
+            last_error = error
+            message = str(error)
+            if "Media Not Found" not in message and "error_subcode\":4279009" not in message:
+                raise
+    raise RuntimeError(f"Threadsの投稿準備が時間内に完了しませんでした: {last_error}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--index", type=int, help="Preview a specific post without advancing state")
+    parser.add_argument("--scheduled", action="store_true", help="Post only when a daily slot is due")
     args = parser.parse_args()
 
     posts = load_json(POSTS_PATH)
     state = load_json(STATE_PATH)
+    now = datetime.now(JST)
+
+    slot_name = None
+    if args.scheduled:
+        slot_name = scheduled_slot(state, now)
+        if slot_name is None:
+            print("現在は投稿時刻ではないか、この時間帯は投稿済みです。")
+            return 0
+
     next_index = state.get("next_index", 0) if args.index is None else args.index
 
     if not 0 <= next_index < len(posts):
@@ -75,16 +139,22 @@ def main() -> int:
     if not creation_id:
         raise RuntimeError("投稿コンテナIDを取得できませんでした。")
 
-    published = api_post(
-        "/me/threads_publish",
-        {"creation_id": creation_id, "access_token": token},
-    )
+    published = publish_with_retry(creation_id, token)
     post_id = published.get("id")
     if not post_id:
         raise RuntimeError("公開済み投稿IDを取得できませんでした。")
 
     state["next_index"] = next_index + 1
     state["last_post_id"] = post_id
+    state["last_posted_at"] = now.isoformat()
+    if slot_name:
+        slot_key = f"{now.date().isoformat()}-{slot_name}"
+        posted_slots = [
+            item for item in state.get("posted_slots", [])
+            if item >= (now.date() - timedelta(days=14)).isoformat()
+        ]
+        posted_slots.append(slot_key)
+        state["posted_slots"] = posted_slots
     STATE_PATH.write_text(
         json.dumps(state, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
