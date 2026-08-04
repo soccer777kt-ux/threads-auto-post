@@ -47,4 +47,15 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false
         env:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-        run: python post_threads.py
+        run: python post_threads.py　　      - name: Save queue position
+        if: github.event_name == 'schedule' || inputs.dry_run == false
+        run: |
+          if git diff --quiet -- state.json; then
+            echo "No state change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "Advance Threads post queue"
+          git push
