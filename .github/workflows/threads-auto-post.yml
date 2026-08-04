@@ -37,7 +37,7 @@ jobs:
         env:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
-                   if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+        　if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
             python post_threads.py --dry-run
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             python post_threads.py
