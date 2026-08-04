@@ -47,7 +47,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false
         env:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-                run: python post_threads.py
+        run: python post_threads.py
 
       - name: Save queue position
         if: github.event_name == 'schedule' || inputs.dry_run == false
