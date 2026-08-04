@@ -4,7 +4,7 @@ on:
   schedule:
     # Standard UTC cron. Python uses Japan time and posts only once per due slot.
     # Frequent checks safely recover when GitHub delays or drops one scheduled run.
-    - cron: "2/5 * * * *"
+    - cron: "17,47 22-23,0-13 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -37,8 +37,10 @@ jobs:
         env:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
+                   if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.dry_run }}" == "true" ]]; then
             python post_threads.py --dry-run
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            python post_threads.py
           else
             python post_threads.py --scheduled
           fi
