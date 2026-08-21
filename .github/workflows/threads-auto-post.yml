@@ -2,6 +2,69 @@ name: Threads Auto Post
 
 on:
   schedule:
+    # 日本時間の朝7時台〜夜22時台に、30分ごとに確認。予定時刻の25分前なら同じ実行内で待機して投稿
+    - cron: "17,47 22-23,0-13 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "投稿せず原稿だけ確認する"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: threads-auto-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Preview next post
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == true
+        run: python post_threads.py --dry-run
+
+      - name: Publish scheduled post
+        if: github.event_name == 'schedule'
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python post_threads.py --scheduled --wait-minutes 25
+
+      - name: Publish post now
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run == false
+        env:
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python post_threads.py
+
+      - name: Save queue position
+        if: github.event_name == 'schedule' || inputs.dry_run == false
+        run: |
+          if git diff --quiet -- state.json; then
+            echo "No state change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "Advance Threads post queue"
+          git push
+name: Threads Auto Post
+
+on:
+  schedule:
     # 日本時間の朝7時台〜夜22時台に、30分ごとに未投稿を確認
     - cron: "17,47 22-23,0-13 * * *"
   workflow_dispatch:
