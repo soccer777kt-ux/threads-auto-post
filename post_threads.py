@@ -75,6 +75,21 @@ def scheduled_slot(state: dict, now: datetime) -> str | None:
     return None
 
 
+def next_unposted_target(state: dict, now: datetime) -> datetime | None:
+    """Return the next unposted target today, if one still remains."""
+    posted_slots = set(state.get("posted_slots", []))
+    targets = DAILY_TARGETS[now.weekday()]
+    for slot_name in ("morning", "lunch", "evening"):
+        slot_key = f"{now.date().isoformat()}-{slot_name}"
+        if slot_key in posted_slots:
+            continue
+        hour, minute = targets[slot_name]
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target > now:
+            return target
+    return None
+
+
 def publish_with_retry(creation_id: str, token: str) -> dict:
     """Wait for Threads to finish preparing a container, then publish it."""
     last_error: Exception | None = None
@@ -99,6 +114,12 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--index", type=int, help="Preview a specific post without advancing state")
     parser.add_argument("--scheduled", action="store_true", help="Post only when a daily slot is due")
+    parser.add_argument(
+        "--wait-minutes",
+        type=int,
+        default=0,
+        help="When scheduled, wait for the next target if it is this many minutes away",
+    )
     args = parser.parse_args()
 
     posts = load_json(POSTS_PATH)
@@ -108,6 +129,18 @@ def main() -> int:
     slot_name = None
     if args.scheduled:
         slot_name = scheduled_slot(state, now)
+        if slot_name is None and args.wait_minutes > 0:
+            next_target = next_unposted_target(state, now)
+            if next_target is not None:
+                wait_seconds = (next_target - now).total_seconds()
+                if 0 < wait_seconds <= args.wait_minutes * 60:
+                    print(
+                        f"次の投稿時刻 {next_target.strftime('%H:%M')} まで"
+                        f" {int(wait_seconds)} 秒待機します。"
+                    )
+                    time.sleep(wait_seconds + 5)
+                    now = datetime.now(JST)
+                    slot_name = scheduled_slot(state, now)
         if slot_name is None:
             print("現在は投稿時刻ではないか、この時間帯は投稿済みです。")
             return 0
