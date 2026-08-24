@@ -1,11 +1,8 @@
 {
-  "next_index": 57,
-  "last_post_id": "18365736769209334",
-  "last_posted_at": "2026-08-24T20:57:08.920145+09:00",
+  "next_index": 58,
+  "last_post_id": "17904030360550672",
+  "last_posted_at": "2026-08-25T08:11:05.000240+09:00",
   "posted_slots": [
-    "2026-08-10-morning",
-    "2026-08-10-lunch",
-    "2026-08-10-evening",
     "2026-08-11-morning",
     "2026-08-11-lunch",
     "2026-08-13-morning",
@@ -43,6 +40,7 @@
     "2026-08-23-evening",
     "2026-08-24-morning",
     "2026-08-24-lunch",
-    "2026-08-24-evening"
+    "2026-08-24-evening",
+    "2026-08-25-morning"
   ]
 }
